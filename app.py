@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime, timedelta
 import sqlite3
+from reportlab.pdfgen import canvas
+
 
 # ---------------- DATABASE ----------------
 
@@ -23,6 +25,15 @@ def create_table():
             expiry_date TEXT
         )
         """)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            member_id INTEGER,
+            member_name TEXT,
+            attendance_date TEXT
+        )
+        """)
+
 
         conn.commit()
 
@@ -61,7 +72,47 @@ def get_members():
         return cur.fetchall()
 
 
+def search_member(name):
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT * FROM members WHERE name LIKE ?",
+            ('%' + name + '%',)
+        )
+
+        return cur.fetchall()
+def get_member_by_id(member_id):
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT * FROM members WHERE id=?",
+            (member_id,)
+        )
+
+        return cur.fetchone()
+
+
+def update_member(member_id, name, phone, fee):
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+        UPDATE members
+        SET name=?, phone=?, fee_paid=?
+        WHERE id=?
+        """,
+        (
+            name,
+            phone,
+            fee,
+            member_id
+        ))
+
+        conn.commit()
 def delete_member(member_id):
+
     with connect() as conn:
         cur = conn.cursor()
 
@@ -72,6 +123,59 @@ def delete_member(member_id):
 
         conn.commit()
 
+def mark_attendance(member_id, member_name):
+
+    today = datetime.now().date()
+
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute("""
+        INSERT INTO attendance
+        VALUES(NULL,?,?,?)
+        """,
+        (
+            member_id,
+            member_name,
+            str(today)
+        ))
+
+        conn.commit()
+
+def get_attendance():
+
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT * FROM attendance ORDER BY id DESC"
+        )
+
+        return cur.fetchall()
+
+
+def generate_receipt(name, phone, fee, payment_mode, expiry):
+
+    filename = f"receipt_{name}.pdf"
+
+    pdf = canvas.Canvas(filename)
+
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(180, 800, "GYM RECEIPT")
+
+    pdf.setFont("Helvetica", 12)
+
+    pdf.drawString(50, 740, f"Member Name: {name}")
+    pdf.drawString(50, 710, f"Phone Number: {phone}")
+    pdf.drawString(50, 680, f"Fee Paid: ₹{fee}")
+    pdf.drawString(50, 650, f"Payment Mode: {payment_mode}")
+    pdf.drawString(50, 620, f"Membership Expiry: {expiry}")
+
+    pdf.drawString(50, 560, "Thank You For Joining Our Gym!")
+
+    pdf.save()
+
+    return filename
 
 # ---------------- PAGE CONFIG ----------------
 
@@ -137,6 +241,10 @@ menu = st.sidebar.selectbox(
         "Dashboard",
         "Add Member",
         "View Members",
+        "Search Member",
+        "Edit Member",
+        "Mark Attendance",
+        "View Attendance",
         "Delete Member"
     ]
 )
@@ -199,22 +307,40 @@ elif menu == "Add Member":
 
     if st.button("✅ Add Member"):
 
-        if name == "":
-            st.error("Please enter member name")
+     if name == "":
+        st.error("Please enter member name")
 
-        else:
+    else:
 
-            expiry = add_member(
-                name,
-                phone,
-                fee,
-                payment_mode,
-                days
-            )
+        expiry = add_member(
+            name,
+            phone,
+            fee,
+            payment_mode,
+            days
+        )
 
-            st.success(
-                f"Member Added Successfully! Expiry Date: {expiry}"
-            )
+        receipt_file = generate_receipt(
+            name,
+            phone,
+            fee,
+            payment_mode,
+            expiry
+        )
+
+        st.success(
+            f"Member Added Successfully! Expiry Date: {expiry}"
+        )
+
+        with open(receipt_file, "rb") as file:
+
+            st.download_button(
+                label="📄 Download Receipt",
+                data=file,
+                file_name=receipt_file,
+                 mime="application/pdf"
+       )
+    
 
 # ---------------- VIEW MEMBERS ----------------
 
@@ -249,17 +375,164 @@ elif menu == "View Members":
             **Expiry Date:** {m[6]}
             """)
 
+# ---------------- SEARCH MEMBER ----------------
+
+elif menu == "Search Member":
+
+    st.subheader("🔍 Search Member")
+
+    search_name = st.text_input("Enter Member Name")
+
+    if st.button("Search"):
+
+        results = search_member(search_name)
+
+        if len(results) == 0:
+
+            st.warning("No member found")
+
+        else:
+
+            for m in results:
+
+                st.markdown(f"""
+                ---
+                ### 👤 {m[1]}
+
+                **ID:** {m[0]}
+
+                **Phone:** {m[2]}
+
+                **Join Date:** {m[3]}
+
+                **Fee Paid:** ₹{m[4]}
+
+                **Payment Mode:** {m[5]}
+
+                **Expiry Date:** {m[6]}
+                """)
+
 # ---------------- DELETE MEMBER ----------------
+# ---------------- VIEW ATTENDANCE ----------------
 
-elif menu == "Delete Member":
+elif menu == "View Attendance":
 
-    st.subheader("🗑️ Delete Member")
+    st.subheader("📋 Attendance Records")
+
+    records = get_attendance()
+
+    if len(records) == 0:
+
+        st.warning("No attendance records found")
+
+    else:
+
+        for r in records:
+
+            st.markdown(f"""
+            ---
+            **Attendance ID:** {r[0]}
+
+            **Member ID:** {r[1]}
+
+            **Member Name:** {r[2]}
+
+            **Date:** {r[3]}
+            """)
+
+# ---------------- MARK ATTENDANCE ----------------
+
+elif menu == "Mark Attendance":
+
+    st.subheader("📅 Mark Attendance")
 
     member_id = st.number_input(
         "Enter Member ID",
-        min_value=1
+        min_value=1,
+        step=1
     )
 
+    if st.button("Load Member"):
+
+        member = get_member_by_id(member_id)
+
+        if member:
+
+            st.session_state["attendance_member"] = member
+
+        else:
+
+            st.error("Member not found")
+
+    if "attendance_member" in st.session_state:
+
+        member = st.session_state["attendance_member"]
+
+        st.success(f"Member: {member[1]}")
+
+        if st.button("✅ Mark Present"):
+
+            mark_attendance(
+                member[0],
+                member[1]
+            )
+
+            st.success("Attendance Marked Successfully!")
+# ---------------- EDIT MEMBER ----------------
+
+elif menu == "Edit Member":
+
+    st.subheader("✏️ Edit Member")
+
+    member_id = st.number_input(
+        "Enter Member ID",
+        min_value=1,
+        step=1
+    )
+
+    if st.button("Load Member"):
+
+        member = get_member_by_id(member_id)
+
+        if member:
+
+            st.session_state["member"] = member
+
+        else:
+
+            st.error("Member not found")
+
+    if "member" in st.session_state:
+
+        member = st.session_state["member"]
+
+        new_name = st.text_input(
+            "Member Name",
+            value=member[1]
+        )
+
+        new_phone = st.text_input(
+            "Phone Number",
+            value=member[2]
+        )
+
+        new_fee = st.number_input(
+            "Fee Paid",
+            value=int(member[4])
+        )
+
+        if st.button("Update Member"):
+
+            update_member(
+                member[0],
+                new_name,
+                new_phone,
+                new_fee
+            )
+
+            st.success(
+                "Member updated successfully!"
+            )
     if st.button("❌ Delete Member"):
 
         delete_member(member_id)
