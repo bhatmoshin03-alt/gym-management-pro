@@ -161,7 +161,7 @@ def generate_receipt(name, phone, fee, payment_mode, expiry):
     pdf = canvas.Canvas(filename)
 
     pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(180, 800, "GYM RECEIPT")
+    pdf.drawString(180, 800, "XCross Fitness Gym")
 
     pdf.setFont("Helvetica", 12)
 
