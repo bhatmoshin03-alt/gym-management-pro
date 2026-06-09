@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 import sqlite3
 from reportlab.pdfgen import canvas
+import streamlit as st
 
 
 # ---------------- DATABASE ----------------
@@ -25,6 +26,7 @@ def create_table():
             expiry_date TEXT
         )
         """)
+
         cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +36,17 @@ def create_table():
         )
         """)
 
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS admin (
+            username TEXT PRIMARY KEY,
+            password TEXT
+        )
+        """)
+
+        cur.execute("""
+        INSERT OR IGNORE INTO admin
+        VALUES ('admin', 'Gym@2026')
+        """)
 
         conn.commit()
 
@@ -111,14 +124,26 @@ def update_member(member_id, name, phone, fee):
         ))
 
         conn.commit()
-def delete_member(member_id):
+def get_admin():
 
     with connect() as conn:
         cur = conn.cursor()
 
         cur.execute(
-            "DELETE FROM members WHERE id=?",
-            (member_id,)
+            "SELECT username, password FROM admin LIMIT 1"
+        )
+
+        return cur.fetchone()
+
+
+def change_password(new_password):
+
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            "UPDATE admin SET password=? WHERE username='admin'",
+            (new_password,)
         )
 
         conn.commit()
@@ -178,6 +203,33 @@ def generate_receipt(name, phone, fee, payment_mode, expiry):
     return filename
 
 # ---------------- PAGE CONFIG ----------------
+
+ADMIN_USERNAME = "admin"
+ADMIN_PASSWORD = "Gym@2026"
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+
+    st.title("🔒 Gym Management Pro Login")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+
+        admin = get_admin()
+
+        if username == admin[0] and password == admin[1]:
+            st.session_state.logged_in = True
+            st.rerun()
+
+        else:
+            st.error("Invalid Username or Password")
+
+    st.stop()
+
 
 st.set_page_config(
     page_title="Gym Management Pro",
@@ -245,7 +297,9 @@ menu = st.sidebar.selectbox(
         "Edit Member",
         "Mark Attendance",
         "View Attendance",
-        "Delete Member"
+        "Delete Member",
+        "Change Password"
+
     ]
 )
 
@@ -307,39 +361,39 @@ elif menu == "Add Member":
 
     if st.button("✅ Add Member"):
 
-     if name == "":
-        st.error("Please enter member name")
+        if name == "":
+            st.error("Please enter member name")
 
-    else:
+        else:
 
-        expiry = add_member(
-            name,
-            phone,
-            fee,
-            payment_mode,
-            days
-        )
+            expiry = add_member(
+                name,
+                phone,
+                fee,
+                payment_mode,
+                days
+            )
 
-        receipt_file = generate_receipt(
-            name,
-            phone,
-            fee,
-            payment_mode,
-            expiry
-        )
+            receipt_file = generate_receipt(
+                name,
+                phone,
+                fee,
+                payment_mode,
+                expiry
+            )
 
-        st.success(
-            f"Member Added Successfully! Expiry Date: {expiry}"
-        )
+            st.success(
+                f"Member Added Successfully! Expiry Date: {expiry}"
+            )
 
-        with open(receipt_file, "rb") as file:
+            with open(receipt_file, "rb") as file:
 
-            st.download_button(
-                label="📄 Download Receipt",
-                data=file,
-                file_name=receipt_file,
-                 mime="application/pdf"
-       )
+                st.download_button(
+                    label="📄 Download Receipt",
+                    data=file,
+                    file_name=receipt_file,
+                    mime="application/pdf"
+                )
     
 
 # ---------------- VIEW MEMBERS ----------------
@@ -540,6 +594,54 @@ elif menu == "Edit Member":
         st.success(
             "Member deleted successfully"
         )
+        # ---------------- CHANGE PASSWORD ----------------
+
+elif menu == "Change Password":
+
+    st.subheader("🔒 Change Password")
+
+    current_password = st.text_input(
+        "Current Password",
+        type="password"
+    )
+
+    new_password = st.text_input(
+        "New Password",
+        type="password"
+    )
+
+    confirm_password = st.text_input(
+        "Confirm New Password",
+        type="password"
+    )
+
+    if st.button("Update Password"):
+
+        admin = get_admin()
+
+        if current_password != admin[1]:
+
+            st.error("Current Password Incorrect")
+
+        elif len(new_password) < 8:
+
+            st.error(
+                "Password must be at least 8 characters"
+            )
+
+        elif new_password != confirm_password:
+
+            st.error(
+                "Passwords do not match"
+            )
+
+        else:
+
+            change_password(new_password)
+
+            st.success(
+                "Password Updated Successfully!"
+            )
 
 # ---------------- FOOTER ----------------
 
