@@ -217,7 +217,7 @@ def generate_receipt(name, phone, fee, payment_mode, expiry):
     pdf.drawString(50, 650, f"Payment Mode: {payment_mode}")
     pdf.drawString(50, 620, f"Membership Expiry: {expiry}")
 
-    pdf.drawString(50, 560, "Thank You For Joining Our Gym!")
+    pdf.drawString(50, 560, "Thank You For Joining Our Gym app developed by bhat moshin mushtaq!")
 
     pdf.save()
 
