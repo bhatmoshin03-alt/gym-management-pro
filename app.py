@@ -124,6 +124,27 @@ def update_member(member_id, name, phone, fee):
         ))
 
         conn.commit()
+def delete_member(member_id):
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute(
+            "DELETE FROM members WHERE id=?",
+            (member_id,)
+        )
+
+        conn.commit()
+
+
+def delete_all_members():
+    with connect() as conn:
+        cur = conn.cursor()
+
+        cur.execute("DELETE FROM members")
+
+        conn.commit()
+
+        conn.commit()
 def get_admin():
 
     with connect() as conn:
@@ -594,6 +615,15 @@ elif menu == "Edit Member":
         st.success(
             "Member deleted successfully"
         )
+# ================= DANGER ZONE =================
+
+st.subheader("⚠️ Danger Zone")
+
+if st.checkbox("Confirm Delete All Members"):
+    if st.button("🗑️ Delete All Members Permanently"):
+        delete_all_members()
+        st.success("All members deleted successfully!")
+        st.rerun()
         # ---------------- CHANGE PASSWORD ----------------
 
 elif menu == "Change Password":
